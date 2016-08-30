@@ -1,16 +1,10 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
-#
-#   Author  :   itchenyi
-#   E-mail  :   itchenyi@gmail.com
-#   Date    :   15/11/14 19:17:23
-#   Desc    :
-#
 from __future__ import unicode_literals
 import os
 import re
 import sys
 import json
+import base64
 import time
 import atexit
 import random
@@ -135,17 +129,18 @@ class Client(Counter):
         self.mail_info = mail_info
         self.params = {
             'time': time.time(),
-            'appid': '0',
+            'appid': '501004106',
             'msgid': '0',
-            'clientid': random.randint(1, 10000000),
+            'clientid': '53999199',
             'ptwebqq': '',
             'vfwebqq': '',
             'psessionid': '',
             'friendList': {},
-            'referer': 'http://d.web2.qq.com/proxy.html?v=20130916001&callback=1&id=2',
+            'referer2': 'http://s.web2.qq.com/proxy.html?v=20130916001&callback=1&id=1',
+            'referer': 'http://d1.web2.qq.com/proxy.html?v=20151105001&callback=1&id=2',
             'smartqqurl': 'http://w.qq.com/login.html'
         }
-        self.uin2tuin = 'http://s.web2.qq.com/api/get_friend_uin2?tuin={0}&type=1&vfwebqq={1}'
+        self.uin2tuin = 'http://s.web2.qq.com/api/get_friend_uin2?tuin={0}&type=1&vfwebqq={1}&t=1471404618'
         self.session.headers = {
             'Accept': 'application/javascript, */*;q=0.8',
             'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) '
@@ -172,7 +167,7 @@ class Client(Counter):
 
                     if item[0] == 'face':
                         msg_txt += '[表情]'
-
+                #判断是否为unicode
                 if isinstance(item, unicode):
                     msg_txt += item
 
@@ -182,7 +177,7 @@ class Client(Counter):
         if os.path.exists(os.path.split(path)[0]):
             print >> open(path, "a+"), msg
         else:
-            raise IOError("やめて %s" % path)
+            raise IOError("error %s" % path)
 
         if mail and content:
             self.send_mail(content)
@@ -193,7 +188,7 @@ class Client(Counter):
 
         me = "QQSpider<{_user}@{_postfix}>".format(_user=self.mail_info['mail_user'],
                                                    _postfix=self.mail_info['mail_postfix'])
-        msg = MIMEText("<h5>QQSpider Error: Number is {0}</h5><br /><span>by jackliu</span>".format(content),
+        msg = MIMEText("<h5>QQSpider Error: Number is {0}</h5><br /><span>by QQSpider</span>".format(content),
                        _subtype='html', _charset='utf8')
         msg['Subject'] = "QQSpider Warning"
         msg['From'] = me
@@ -203,20 +198,17 @@ class Client(Counter):
             smtp.connect(self.mail_info['mail_host'], self.mail_info['mail_port'])
             smtp.login("{0}@{1}".format(self.mail_info['mail_user'],
                        self.mail_info['mail_postfix']), self.mail_info['mail_pass'])
-
             smtp.sendmail(me, self.mail_info['mail_to_list'].split(','), msg.as_string())
             smtp.close()
         except Exception as e:
-            print(e)
+            self.write_msg(self.logs_path, e)
             exit(128)
 
     def uin_to_account(self, tuin):
         if tuin not in self.params['friendList']:
             try:
-                info = json.loads(self.session.get(self.uin2tuin.format(
-                    tuin, self.params['vfwebqq']
-                ), headers={"Referer": self.params['referer']}).content)
-
+                data = self.uin2tuin.format(tuin, self.params['vfwebqq'])
+                info = json.loads(self.session.get(data, headers={"Referer": self.params['referer2']}).content)
                 if info['retcode'] != 0:
                     raise ValueError(info)
 
@@ -224,7 +216,7 @@ class Client(Counter):
                 self.params['friendList'][tuin] = info['result']['account']
 
             except Exception as e:
-                print(e)
+                self.write_msg(self.logs_path, e)
 
         return self.params['friendList'][tuin]
 
@@ -255,119 +247,158 @@ class QQ(Client, Daemon):
         self.login_err = 1
         self.nickname = None
         self.result = None
+        #api 响应超时为 60s ,此处应大于api时间保证得到数据
         self.timeout = 80
         self.qq_number = qq_number
         self.logs_path = logs_path + "/qq_{0}.log".format(qq_number)
         self.data_path = data_path + "/qq_{0}.data".format(qq_number)
+        self.orginal_data_path = data_path + "/qq_{0}_orginal.data".format(qq_number)
         self.qrcode_path = qrcode_path + "/qrcode_{0}.png".format(qq_number)
-        self.qlogin = 'http://d.web2.qq.com/channel/login2'
-        self.poll2 = 'http://d.web2.qq.com/channel/poll2'
-        self.poll2_data = '{{"ptwebqq":"{0}","clientid":{1},"psessionid":"{2}","key":""}}'
-        self.qlogin_data = '{{"ptwebqq":"{0}","clientid":{1},"psessionid":"{2}","status":"online"}}'
-        self.qrcode = 'https://ssl.ptlogin2.qq.com/ptqrshow?appid={_app_id}&e=0&l=L&s=8&d=72&v=4'
+        self.qlogin = 'http://d1.web2.qq.com/channel/login2'
+        self.poll2 = 'http://d1.web2.qq.com/channel/poll2'
+        self.poll2_data = 'r={{"ptwebqq":"{0}","clientid":{1},"psessionid":"{2}","key":""}}'
+        self.qlogin_data = 'r={{"ptwebqq":"{0}","clientid":{1},"psessionid":"{2}","status":"online"}}'
+        self.qrcode = 'https://ssl.ptlogin2.qq.com/ptqrshow?appid={_app_id}&e=0&l=M&s=5&d=72&v=4&t=0.3829711841267506'
         self.qrcode_verify = ('https://ssl.ptlogin2.qq.com/ptqrlogin?webqq_type=10&remember_uin=1'
-                              '&login2qq=1&aid={0}&u1=http%3A%2F%2Fw.qq.com%2Fproxy.html%3Flogin2'
+                              '&login2qq=1&aid=501004106&u1=http%3A%2F%2Fw.qq.com%2Fproxy.html%3Flogin2'
                               'qq%3D1%26webqq_type%3D10&ptredirect=0&ptlang=2052&daid=164&from_ui=1'
-                              '&pttype=1&dumy=&fp=loginerroralert&action=0-0-{1}&mibao_css={2}'
-                              '&t=undefined&g=1&js_type=0&js_ver={3}&login_sig={4}')
-
+                              '&pttype=1&dumy=&fp=loginerroralert&action=0-0-{0}&mibao_css={1}'
+                              '&t=undefined&g=1&js_type=0&js_ver={2}&login_sig={3}')
     def login(self):
-        init_url = self.get_html_value(
-                        self.session.get(self.params['smartqqurl']).content, r'\.src = "(.+?)"')
-
+        smartqqurl_content = self.session.get(self.params['smartqqurl']).content
+        #self.write_msg(self.logs_path, smartqqurl_content)
+        init_url = self.get_html_value(smartqqurl_content, r'\.src = "(.+?)"')
+        self.write_msg(self.logs_path, init_url)
         #: login + var name
         _html = self.session.get(init_url + '0').content
-
-        #: _app_id useless
-        self.get_html_value(_html, r'g_appid\s*=\s*encodeURIComponent\s*\("(\d+)"')
-        _sign = self.get_html_value(_html, r'g_login_sig\s*=\s*encodeURIComponent\s*\("(.+?)"\)')
-        _js_ver = self.get_html_value(_html, r'g_pt_version\s*=\s*encodeURIComponent\s*\("(\d+)"\)')
-        _mibao_css = self.get_html_value(_html, r'g_mibao_css\s*=\s*encodeURIComponent\s*\("(.+?)"\)')
+        _sign = ''
+        _js_ver = '10169'
+        _mibao_css = 'm_webqq'
         _start_time = (int(time.mktime(datetime.utcnow().timetuple())) * 1000)
 
         while True:
             self.count += 1
             self.save_qrcode(self.qrcode_path, self.qrcode.format(_app_id=self.params['appid']))
-
             while True:
-                _html = self.session.get(self.qrcode_verify.format(
-                    self.params['appid'], ((int(time.mktime(datetime.utcnow().timetuple())) * 1000) - _start_time),
-                    _mibao_css, _js_ver, _sign), headers={"Referer": self.params['referer']}
+                url = self.qrcode_verify.format(((int(time.mktime(datetime.utcnow().timetuple())) * 1000) - _start_time),_mibao_css, _js_ver, _sign)
+                self.write_msg(self.logs_path, url)
+                _html = self.session.get(url, headers={"Referer": self.params['referer']}
                 ).content
-
+                
                 self.result = _html.decode('utf-8').split("'")
                 if self.result[1] == '65' or self.result[1] == '0':
                     break
 
                 time.sleep(2)
-
-            if self.result[1] == '0' or self.count > 5:
+            
+            if self.result[1] == '0' or self.count > 50:
                 break
 
         if self.result[1] != '0':
             raise ValueError("RetCode = %s" % self.result['retcode'])
-
-        print "Login Sucess"
+        #二维码扫描成功
+        self.write_msg(self.logs_path, "Login Sucess!")
+        #print "Login Sucess"
         self.up_time()
         #: Assignment current nickname
         self.nickname = self.result[11]
-
-        self.session.get(self.result[5])
+        _html = self.session.get(self.result[5]).content
+        self.write_msg(self.logs_path, self.result[5])
         self.params['ptwebqq'] = self.session.cookies['ptwebqq']
-
+        
         while self.login_err != 0:
             try:
-                _html = self.session.post(self.qlogin, data={'r': self.qlogin_data.format(
-                    self.params['ptwebqq'], self.params['clientid'], self.params['psessionid']
-                )}, headers={"Referer": self.params['referer']}).content
-
+                '''
+                login webqq
+                '''
+                data=self.qlogin_data.format(self.params['ptwebqq'], self.params['clientid'], self.params['psessionid'])
+                _html = self.session.post(self.qlogin,data).content
                 self.result = json.loads(_html)
-                self.login_err = 0
+                self.write_msg(self.logs_path, self.result['retcode'])
+                if self.result['retcode'] != 0:
+                    self.login_err = 1
+                else:
+                    self.login_err = 0
             except Exception as e:
                 self.login_err += 1
+                
                 self.write_msg(self.logs_path, "Login Field....retrying.... \n{0}".format(e))
+                #exit(0)
 
         if self.result['retcode'] != 0:
             raise ValueError("Login Retcode=%s" % str(self.result['retcode']))
-
-        self.params['vfwebqq'] = self.result['result']['vfwebqq']
+        
+        #获得vfwebqq,此处仍有bug,vfwebqq不能争取解析,限定了一个值
+        #self.params['vfwebqq'] = self.result['result']['vfwebqq']
+        self.params['vfwebqq'] = 'f3a8ac245aa03404de23207a07d40f8a7ac901a2e444d9b597c0a4a64c6430fb'
+        #获得psessionid
         self.params['psessionid'] = self.result['result']['psessionid']
+        #获得msgid
         self.params['msgid'] = int(random.uniform(20000, 50000))
+        
+        '''
+        
+        self.write_msg(self.logs_path, self.params['vfwebqq'])
+        
+        self.write_msg(self.logs_path, self.params['psessionid'])
+        self.params['msgid'] = int(random.uniform(20000, 50000))
+        self.write_msg(self.logs_path, self.params['msgid'])
         self.write_msg(self.logs_path, "Login({0}) Sucess, nickname({1})".format(
                        self.result['result']['uin'], self.nickname))
+        '''               
 
     def msg_handler(self, msg):
-        for item in msg:
-            msg_type = item['poll_type']
+        try:
+            for item in msg:
+                msg_type = item['poll_type']
+                
+                #: message and sess_message no opration
+                if msg_type == 'message' or msg_type == 'sess_message':
+                    pass
 
-            #: message and sess_message no opration
-            if msg_type == 'message' or msg_type == 'sess_message':
-                pass
+                if msg_type == 'group_message':
 
-            if msg_type == 'group_message':
-                text = self.combine_msg(item['value']['content'])
-                date = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(item['value']['time']))
-                gid = item['value']['info_seq']
-                qid = self.uin_to_account(str(item['value']['send_uin']))
-                self.write_msg(self.data_path, (text, date, gid, qid, self.qq_number))
+                    msg_data = json.dumps(msg,encoding='utf-8')
+                    self.write_msg(self.orginal_data_path, msg_data)              
+                    uin = item['value']['send_uin']
 
-            if msg_type == 'kick_message':
-                raise Exception(item['value']['reason'])
+                    #uid to account
+                    try:
+                        from_qq_number = self.uin_to_account(uin)
+                      
+                    except Exception as e:
+                        self.write_msg(self.logs_path, "uin2account error!\n{0}".format(e))
+                    date = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(item['value']['time']))
+                    text = self.combine_msg(item['value']['content'])
+                    str_text=text.encode('gbk')
+                    gid = item['value']['group_code']
+                    
+                    self.write_msg(self.data_path,(date,gid,from_qq_number,self.qq_number,str_text))
 
+ 
+                if msg_type == 'kick_message':
+                    raise Exception(item['value']['reason'])
+        except Exception as e:
+            self.write_msg(self.logs_path, "msg_handler failed\n{0}".format(e))
+            
     def check_message(self):
         try:
-            _html = self.session.post(self.poll2, data={'r': self.poll2_data.format(
+            data=self.poll2_data.format(
                 self.params['ptwebqq'], self.params['clientid'], self.params['psessionid']
-            )}, headers={"Referer": self.params['referer']}, timeout=self.timeout).content
+            )
+            _html = self.session.post(self.poll2, data, headers={"Referer": self.params['referer']}, timeout=self.timeout).content
+            self.write_msg(self.logs_path, _html)
+            
         except Exception as _timeout:
             self.write_msg(self.logs_path, "check_message:\n[{0}]".format(_timeout),
                            mail=True, content=self.qq_number)
             self.stop()
-
+        
         self.write_msg(self.logs_path, "Pull message... info[{qq},{time}]".format(
                        qq=self.nickname, time=datetime.now()))
         try:
-            result = json.loads(_html)
+            result = json.loads(_html,encoding='utf-8')
+            self.write_msg(self.logs_path, result)
         except Exception as e:
             self.write_msg(self.logs_path, "Pull message failed, retrying!\n{0}".format(e))
             return self.check_message()
@@ -381,7 +412,8 @@ class QQ(Client, Daemon):
             if self.byebye < 5:
                 result = self.check_message()
             else:
-                self.write_msg(self.logs_path, "やめて", mail=True, content=self.qq_number)
+            #出现错误发送邮件提醒
+                self.write_msg(self.logs_path, "retcode error", mail=True, content=self.qq_number)
                 self.stop()
 
             #: Post data format error
@@ -391,17 +423,27 @@ class QQ(Client, Daemon):
             #: No Message
             elif result['retcode'] == 102:
                 self.byebye = 0
+                
+            #: QQ掉线需要重新登陆
+            elif result['retcode'] == 100012:
+                self.byebye += 1
+            
+            #: 二次登陆失败,可以先smartQQ网页版登陆一次,再扫描爬虫生成的二维码
+            elif result['retcode'] == 103:
+                self.byebye += 1
 
             #: Update ptwebqq value
             elif result['retcode'] == 116:
                 self.params['ptwebqq'] = result['p']
                 self.byebye = 0
-
-            #: やめて
+            #: error
             elif result['retcode'] == 0:
-                self.msg_handler(result['result'])
+                self.write_msg(self.logs_path, "Pull message content!")
+                try:
+                    self.msg_handler(result['result'])
+                except Exception as e:
+                    self.write_msg(self.logs_path, "'errmsg': 'error!!!")
                 self.byebye = 0
-
             else:
                 self.byebye += 1
 
@@ -416,7 +458,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.action not in optional:
-        print "optional やめて"
+        print "optional error"
         sys.exit(128)
 
     from ConfigParser import ConfigParser
@@ -426,7 +468,7 @@ if __name__ == '__main__':
     if os.path.exists(CONFIG_PATH):
         config.read(CONFIG_PATH)
     else:
-        print "CONFIG_PATH やめて"
+        print "CONFIG_PATH error"
 
     #: create not exists dir
     for _, _path in set(config.items('path')):
@@ -448,4 +490,4 @@ if __name__ == '__main__':
     elif 'debug' == args.action:
         daemon.run()
     else:
-        print "やめて"
+        print "error"
